@@ -7,7 +7,9 @@ let product = {
     Model: { type: String, required: true},
     Description: { type: String, required: true},
     Price: { type: Number, required: true},
-    Qquantity: { type: Number, required: true}, //you can also have a default value
+    //add image type;
+    //add product number
+    Quantity: { type: Number, required: true}, //you can also have a default value
     created_date: { type: Date, default: Date.now()}
     
 }

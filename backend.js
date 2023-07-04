@@ -11,10 +11,11 @@ const registerRouter = require("./routes/register")
 let app = express(); //creatServer() instance
 //To pass any Payload of type Json for POST requests
 app.use(express.json());
+
 const db = getDbConnection();
 //middlewares
-app.use("/", homeRouter);
-app.use("/", aboutRouter);
+app.use( homeRouter);
+app.use( aboutRouter);
 app.use( contactRouter);
 app.use( masokoRouter);
 app.use( productsRouter);
