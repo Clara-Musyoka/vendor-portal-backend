@@ -22,6 +22,4 @@ db.on("error", ()=>{
 return db;
 }
 module.exports = setup;
-//export DB_NAME="vendorportal"
-//export DB_USER="cmusyoka"
-//export DB_PASS="Lolototo__0"
+
