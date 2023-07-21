@@ -35,7 +35,7 @@ router.post("/create-user", async (req, res, next) => {
 //create activation token 
     const activationToken = createActivationToken(user);
 
-    const activationUrl = `https://eshop-tutorial-pyri.vercel.app/activation/${activationToken}`;
+    const activationUrl = `https://vendor-portal-backend.onrender.com/activation/${activationToken}`;
 
     try {
       await sendMail({
