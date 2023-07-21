@@ -35,7 +35,7 @@ router.post("/create-shop", async (req, res, next) => {
 
     const activationToken = createActivationToken(user);
 
-    const activationUrl = `https://vendor-portal-backend.onrender.com/activation/${activationToken}`;
+    const activationUrl = `https://vendor-portal-frontend-fbr8ldf39-clara-musyoka.vercel.app/?vercelToolbarCode=OglqpVfu4_MGsWr/activation/${activationToken}`;
 
     try {
       await sendMail({
