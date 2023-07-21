@@ -35,7 +35,7 @@ router.post("/create-user", async (req, res, next) => {
 //create activation token 
     const activationToken = createActivationToken(user);
 
-    const activationUrl = `https://vendor-portal-frontend-fbr8ldf39-clara-musyoka.vercel.app/?vercelToolbarCode=OglqpVfu4_MGsWr/activation/${activationToken}`;
+    const activationUrl = `https://vendor-portal-frontend-fbr8ldf39-clara-musyoka.vercel.app/activation/${activationToken}`;
 
     try {
       await sendMail({
