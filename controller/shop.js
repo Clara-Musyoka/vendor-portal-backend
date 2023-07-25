@@ -39,7 +39,7 @@ router.post("/create-shop", catchAsyncErrors(async (req, res, next) => {
 
     const activationToken = createActivationToken(seller);
 
-    const activationUrl = `https://vendor-portal-frontend-fbr8ldf39-clara-musyoka.vercel.app/activation/${activationToken}`;
+    const activationUrl = `https://vendor-portal-frontend-76rsl484a-clara-musyoka.vercel.app/activation/${activationToken}`;
 
     try {
       await sendMail({
