@@ -1,51 +1,55 @@
 const express = require("express");
-const User = require("../model/user");
+const path = require("path");
 const router = express.Router();
-const cloudinary = require("cloudinary");
-const ErrorHandler = require("../utils/ErrorHandler");
-const catchAsyncErrors = require("../middleware/catchAsyncErrors");
 const jwt = require("jsonwebtoken");
 const sendMail = require("../utils/sendMail");
-const sendToken = require("../utils/jwtToken");
-const { isAuthenticated, isAdmin } = require("../middleware/auth");
+const Shop = require("../model/shop");
+const { isAuthenticated, isSeller, isAdmin } = require("../middleware/auth");
+const cloudinary = require("cloudinary");
+const catchAsyncErrors = require("../middleware/catchAsyncErrors");
+const ErrorHandler = require("../utils/ErrorHandler");
+const sendShopToken = require("../utils/shopToken");
 
-// create user
-router.post("/create-shop", async (req, res, next) => {
+// create shop
+router.post("/create-shop", catchAsyncErrors(async (req, res, next) => {
   try {
-    const { name, email, password, avatar } = req.body;
-    const userEmail = await User.findOne({ email });
-
-    if (userEmail) {
+    const { email } = req.body;
+    const sellerEmail = await Shop.findOne({ email });
+    if (sellerEmail) {
       return next(new ErrorHandler("User already exists", 400));
     }
 
-    const myCloud = await cloudinary.v2.uploader.upload(avatar, {
+    const myCloud = await cloudinary.v2.uploader.upload(req.body.avatar, {
       folder: "avatars",
     });
 
-    const user = {
-      name: name,
+
+    const seller = {
+      name: req.body.name,
       email: email,
-      password: password,
+      password: req.body.password,
       avatar: {
         public_id: myCloud.public_id,
         url: myCloud.secure_url,
       },
+      address: req.body.address,
+      phoneNumber: req.body.phoneNumber,
+      zipCode: req.body.zipCode,
     };
 
-    const activationToken = createActivationToken(user);
+    const activationToken = createActivationToken(seller);
 
     const activationUrl = `https://vendor-portal-frontend-fbr8ldf39-clara-musyoka.vercel.app/activation/${activationToken}`;
 
     try {
       await sendMail({
-        email: user.email,
-        subject: "Activate your account",
-        message: `Hello ${user.name}, please click on the link to activate your account: ${activationUrl}`,
+        email: seller.email,
+        subject: "Activate your Shop",
+        message: `Hello ${seller.name}, please click on the link to activate your shop: ${activationUrl}`,
       });
       res.status(201).json({
         success: true,
-        message: `please check your email:- ${user.email} to activate your account!`,
+        message: `please check your email:- ${seller.email} to activate your shop!`,
       });
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
@@ -53,11 +57,11 @@ router.post("/create-shop", async (req, res, next) => {
   } catch (error) {
     return next(new ErrorHandler(error.message, 400));
   }
-});
+}));
 
 // create activation token
-const createActivationToken = (user) => {
-  return jwt.sign(user, process.env.ACTIVATION_SECRET, {
+const createActivationToken = (seller) => {
+  return jwt.sign(seller, process.env.ACTIVATION_SECRET, {
     expiresIn: "5m",
   });
 };
@@ -69,38 +73,43 @@ router.post(
     try {
       const { activation_token } = req.body;
 
-      const newUser = jwt.verify(
+      const newSeller = jwt.verify(
         activation_token,
         process.env.ACTIVATION_SECRET
       );
 
-      if (!newUser) {
+      if (!newSeller) {
         return next(new ErrorHandler("Invalid token", 400));
       }
-      const { name, email, password, avatar } = newUser;
+      const { name, email, password, avatar, zipCode, address, phoneNumber } =
+        newSeller;
 
-      let user = await User.findOne({ email });
+      let seller = await Shop.findOne({ email });
 
-      if (user) {
+      if (seller) {
         return next(new ErrorHandler("User already exists", 400));
       }
-      user = await User.create({
+
+      seller = await Shop.create({
         name,
         email,
         avatar,
         password,
+        zipCode,
+        address,
+        phoneNumber,
       });
 
-      sendToken(user, 201, res);
+      sendShopToken(seller, 201, res);
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
     }
   })
 );
 
-// login user
+// login shop
 router.post(
-  "/login-user",
+  "/login-shop",
   catchAsyncErrors(async (req, res, next) => {
     try {
       const { email, password } = req.body;
@@ -109,7 +118,7 @@ router.post(
         return next(new ErrorHandler("Please provide the all fields!", 400));
       }
 
-      const user = await User.findOne({ email }).select("+password");
+      const user = await Shop.findOne({ email }).select("+password");
 
       if (!user) {
         return next(new ErrorHandler("User doesn't exists!", 400));
@@ -123,28 +132,28 @@ router.post(
         );
       }
 
-      sendToken(user, 201, res);
+      sendShopToken(user, 201, res);
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
     }
   })
 );
 
-// load user
+// load shop
 router.get(
-  "/getuser",
-  isAuthenticated,
+  "/getSeller",
+  isSeller,
   catchAsyncErrors(async (req, res, next) => {
     try {
-      const user = await User.findById(req.user.id);
+      const seller = await Shop.findById(req.seller._id);
 
-      if (!user) {
+      if (!seller) {
         return next(new ErrorHandler("User doesn't exists", 400));
       }
 
       res.status(200).json({
         success: true,
-        user,
+        seller,
       });
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
@@ -152,12 +161,12 @@ router.get(
   })
 );
 
-// log out user
+// log out from shop
 router.get(
   "/logout",
   catchAsyncErrors(async (req, res, next) => {
     try {
-      res.cookie("token", null, {
+      res.cookie("seller_token", null, {
         expires: new Date(Date.now()),
         httpOnly: true,
         sameSite: "none",
@@ -173,37 +182,15 @@ router.get(
   })
 );
 
-// update user info
-router.put(
-  "/update-user-info",
-  isAuthenticated,
+// get shop info
+router.get(
+  "/get-shop-info/:id",
   catchAsyncErrors(async (req, res, next) => {
     try {
-      const { email, password, phoneNumber, name } = req.body;
-
-      const user = await User.findOne({ email }).select("+password");
-
-      if (!user) {
-        return next(new ErrorHandler("User not found", 400));
-      }
-
-      const isPasswordValid = await user.comparePassword(password);
-
-      if (!isPasswordValid) {
-        return next(
-          new ErrorHandler("Please provide the correct information", 400)
-        );
-      }
-
-      user.name = name;
-      user.email = email;
-      user.phoneNumber = phoneNumber;
-
-      await user.save();
-
+      const shop = await Shop.findById(req.params.id);
       res.status(201).json({
         success: true,
-        user,
+        shop,
       });
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
@@ -211,15 +198,15 @@ router.put(
   })
 );
 
-// update user avatar
+// update shop profile picture
 router.put(
-  "/update-avatar",
-  isAuthenticated,
+  "/update-shop-avatar",
+  isSeller,
   catchAsyncErrors(async (req, res, next) => {
     try {
-      let existsUser = await User.findById(req.user.id);
-      if (req.body.avatar !== "") {
-        const imageId = existsUser.avatar.public_id;
+      let existsSeller = await Shop.findById(req.seller._id);
+
+        const imageId = existsSeller.avatar.public_id;
 
         await cloudinary.v2.uploader.destroy(imageId);
 
@@ -228,17 +215,17 @@ router.put(
           width: 150,
         });
 
-        existsUser.avatar = {
+        existsSeller.avatar = {
           public_id: myCloud.public_id,
           url: myCloud.secure_url,
         };
-      }
 
-      await existsUser.save();
+  
+      await existsSeller.save();
 
       res.status(200).json({
         success: true,
-        user: existsUser,
+        seller:existsSeller,
       });
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
@@ -246,116 +233,31 @@ router.put(
   })
 );
 
-// update user addresses
+// update seller info
 router.put(
-  "/update-user-addresses",
-  isAuthenticated,
+  "/update-seller-info",
+  isSeller,
   catchAsyncErrors(async (req, res, next) => {
     try {
-      const user = await User.findById(req.user.id);
+      const { name, description, address, phoneNumber, zipCode } = req.body;
 
-      const sameTypeAddress = user.addresses.find(
-        (address) => address.addressType === req.body.addressType
-      );
-      if (sameTypeAddress) {
-        return next(
-          new ErrorHandler(`${req.body.addressType} address already exists`)
-        );
+      const shop = await Shop.findOne(req.seller._id);
+
+      if (!shop) {
+        return next(new ErrorHandler("User not found", 400));
       }
 
-      const existsAddress = user.addresses.find(
-        (address) => address._id === req.body._id
-      );
+      shop.name = name;
+      shop.description = description;
+      shop.address = address;
+      shop.phoneNumber = phoneNumber;
+      shop.zipCode = zipCode;
 
-      if (existsAddress) {
-        Object.assign(existsAddress, req.body);
-      } else {
-        // add the new address to the array
-        user.addresses.push(req.body);
-      }
-
-      await user.save();
-
-      res.status(200).json({
-        success: true,
-        user,
-      });
-    } catch (error) {
-      return next(new ErrorHandler(error.message, 500));
-    }
-  })
-);
-
-// delete user address
-router.delete(
-  "/delete-user-address/:id",
-  isAuthenticated,
-  catchAsyncErrors(async (req, res, next) => {
-    try {
-      const userId = req.user._id;
-      const addressId = req.params.id;
-
-      await User.updateOne(
-        {
-          _id: userId,
-        },
-        { $pull: { addresses: { _id: addressId } } }
-      );
-
-      const user = await User.findById(userId);
-
-      res.status(200).json({ success: true, user });
-    } catch (error) {
-      return next(new ErrorHandler(error.message, 500));
-    }
-  })
-);
-
-// update user password
-router.put(
-  "/update-user-password",
-  isAuthenticated,
-  catchAsyncErrors(async (req, res, next) => {
-    try {
-      const user = await User.findById(req.user.id).select("+password");
-
-      const isPasswordMatched = await user.comparePassword(
-        req.body.oldPassword
-      );
-
-      if (!isPasswordMatched) {
-        return next(new ErrorHandler("Old password is incorrect!", 400));
-      }
-
-      if (req.body.newPassword !== req.body.confirmPassword) {
-        return next(
-          new ErrorHandler("Password doesn't matched with each other!", 400)
-        );
-      }
-      user.password = req.body.newPassword;
-
-      await user.save();
-
-      res.status(200).json({
-        success: true,
-        message: "Password updated successfully!",
-      });
-    } catch (error) {
-      return next(new ErrorHandler(error.message, 500));
-    }
-  })
-);
-
-// find user infoormation with the userId
-router.get(
-  "/user-info/:id",
-  catchAsyncErrors(async (req, res, next) => {
-    try {
-      const user = await User.findById(req.params.id);
+      await shop.save();
 
       res.status(201).json({
         success: true,
-        user,
+        shop,
       });
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
@@ -363,19 +265,19 @@ router.get(
   })
 );
 
-// all users --- for admin
+// all sellers --- for admin
 router.get(
-  "/admin-all-users",
+  "/admin-all-sellers",
   isAuthenticated,
   isAdmin("Admin"),
   catchAsyncErrors(async (req, res, next) => {
     try {
-      const users = await User.find().sort({
+      const sellers = await Shop.find().sort({
         createdAt: -1,
       });
       res.status(201).json({
         success: true,
-        users,
+        sellers,
       });
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
@@ -383,30 +285,74 @@ router.get(
   })
 );
 
-// delete users --- admin
+// delete seller ---admin
 router.delete(
-  "/delete-user/:id",
+  "/delete-seller/:id",
   isAuthenticated,
   isAdmin("Admin"),
   catchAsyncErrors(async (req, res, next) => {
     try {
-      const user = await User.findById(req.params.id);
+      const seller = await Shop.findById(req.params.id);
 
-      if (!user) {
+      if (!seller) {
         return next(
-          new ErrorHandler("User is not available with this id", 400)
+          new ErrorHandler("Seller is not available with this id", 400)
         );
       }
 
-      const imageId = user.avatar.public_id;
-
-      await cloudinary.v2.uploader.destroy(imageId);
-
-      await User.findByIdAndDelete(req.params.id);
+      await Shop.findByIdAndDelete(req.params.id);
 
       res.status(201).json({
         success: true,
-        message: "User deleted successfully!",
+        message: "Seller deleted successfully!",
+      });
+    } catch (error) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  })
+);
+
+// update seller withdraw methods --- sellers
+router.put(
+  "/update-payment-methods",
+  isSeller,
+  catchAsyncErrors(async (req, res, next) => {
+    try {
+      const { withdrawMethod } = req.body;
+
+      const seller = await Shop.findByIdAndUpdate(req.seller._id, {
+        withdrawMethod,
+      });
+
+      res.status(201).json({
+        success: true,
+        seller,
+      });
+    } catch (error) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  })
+);
+
+// delete seller withdraw merthods --- only seller
+router.delete(
+  "/delete-withdraw-method/",
+  isSeller,
+  catchAsyncErrors(async (req, res, next) => {
+    try {
+      const seller = await Shop.findById(req.seller._id);
+
+      if (!seller) {
+        return next(new ErrorHandler("Seller not found with this id", 400));
+      }
+
+      seller.withdrawMethod = null;
+
+      await seller.save();
+
+      res.status(201).json({
+        success: true,
+        seller,
       });
     } catch (error) {
       return next(new ErrorHandler(error.message, 500));
