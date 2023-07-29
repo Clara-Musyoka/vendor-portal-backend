@@ -6,7 +6,7 @@ const bodyParser = require("body-parser");
 const cors = require("cors");
 
 app.use(cors({
-  origin: ['https://vendor-portal-frontend-git-master-clara-musyoka.vercel.app',],
+  origin: ['https://vendor-portal-frontend.vercel.app',],
   credentials: true
 }));
 
