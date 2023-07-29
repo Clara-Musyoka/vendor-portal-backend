@@ -32,10 +32,10 @@ router.post("/create-user", async (req, res, next) => {
         url: myCloud.secure_url,
       },
     };
-//create activation token 
+
     const activationToken = createActivationToken(user);
 
-    const activationUrl = `https://vendor-portal-frontend-76rsl484a-clara-musyoka.vercel.app/activation/${activationToken}`;
+    const activationUrl = `https://vendor-portal-frontend-git-master-clara-musyoka.vercel.app/activation/${activationToken}`;
 
     try {
       await sendMail({
